@@ -1,2 +1,7 @@
 .venv
+.venv-win
 .devbox
+data
+.env
+derby.log
+**__pycache__**

@@ -32,8 +32,8 @@ from delta import configure_spark_with_delta_pip
 
 from pyspark.ml.functions import predict_batch_udf
 
-METASTORE_PATH = "C:\\Users\\User\\Documents\\Maestría\\Amazon Reviews Code\\data"
-WAREHOUSE_PATH = "C:\\Users\\User\\Documents\\Maestría\\Amazon Reviews Code\\data\\warehouse"
+METASTORE_PATH = "D:\\Maestría\\Amazon Reviews Code\\data"
+WAREHOUSE_PATH = "D:\\Maestría\\Amazon Reviews Code\\data\\warehouse"
 
 class SparkUtils:
     def __init__( self, name = 'metastore_db' ):

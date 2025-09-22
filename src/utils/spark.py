@@ -75,5 +75,5 @@ class SparkUtils:
 
     def close(self): self.spark.stop()
 
-    def path(self, name):
-        return f'{WAREHOUSE_PATH}/{name}'
+    def path(self, name, catalog = 'silver'):
+        return f'{WAREHOUSE_PATH}/{catalog}/{name}'

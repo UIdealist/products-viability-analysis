@@ -1,0 +1,1 @@
+## Consumo de información en formato .JSONL original a lago de datos

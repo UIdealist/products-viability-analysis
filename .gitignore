@@ -5,3 +5,4 @@ data
 .env
 derby.log
 **__pycache__**
+images

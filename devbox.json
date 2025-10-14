@@ -1,9 +1,9 @@
 {
-  "$schema":  "https://raw.githubusercontent.com/jetify-com/devbox/0.13.4/.schema/devbox.schema.json",
-  "packages": ["python@3.10"],
+  "$schema":  "https://raw.githubusercontent.com/jetify-com/devbox/0.13.7/.schema/devbox.schema.json",
+  "packages": ["python@3.11"],
   "shell": {
     "init_hook": [
-      "source ./.venv/bin/activate"
+      "echo 'Welcome to devbox!' > /dev/null"
     ],
     "scripts": {
       "test": [

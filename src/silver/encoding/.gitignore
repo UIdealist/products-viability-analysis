@@ -1,0 +1,3 @@
+tf_hub_cache/**
+spark_nlp_cache/**
+embeddings_cache/**

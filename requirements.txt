@@ -1,6 +1,6 @@
 # Core Data Processing
 pandas>=1.5.0
-numpy>=1.21.0
+numpy>=1.21.0,<2.0
 
 # Apache Spark and Delta Lake - PySpark 3.5.0 uses Scala 2.12
 pyspark==3.5.0
@@ -34,3 +34,7 @@ jupyter>=1.0.0
 # Additional utilities
 html5lib>=1.1
 pyarrow>=4.0.0
+
+# MLflow for experiment tracking
+mlflow>=3.5.0
+tensorflow-hub>=0.16.0

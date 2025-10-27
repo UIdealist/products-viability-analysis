@@ -3,7 +3,7 @@ import shutil
 import tensorflow as tf
 import tensorflow_io as tfio
 from abc import ABC, abstractmethod
-from typing import Tuple, Dict, Any, Optional
+from typing import Tuple, Dict, Any, Optional, Union
 from ..mlflow_logger import MLflowModelLogger
 import pyarrow.parquet as pq
 
@@ -38,18 +38,31 @@ class BaseModel(ABC):
     def generate_io_dataset(
         self, 
         dst_path: str, 
-        target_column: bytes
+        target_columns: list[bytes]
     ) -> tf.data.Dataset:
-        dataset = tfio.IODataset.from_parquet(dst_path)
-        
+        files = tf.io.gfile.glob(f"{dst_path}/*.parquet")
+        if not files:
+            return tf.data.Dataset.from_tensor_slices(([], []))
+
+        print("Files count:", len(files))
+        datasets = []
+        dataset = None
+        for i, f in enumerate(files):
+            print("Reading file:", f)
+            datasets.append(tfio.IODataset.from_parquet(f))
+            if i > 0:
+                dataset = dataset.concatenate(datasets[i])
+            else:
+                dataset = datasets[i]
+
         def split_xy(row):
-            y = row[target_column]
-            feature_cols = [k for k in row.keys() if k != target_column]
+            target_cols = [k for k in row.keys() if k in target_columns]
+            y = tf.stack([tf.cast(row[k], tf.float32) for k in target_cols], axis=-1)
+            feature_cols = [k for k in row.keys() if k not in target_cols]
             x = tf.stack([tf.cast(row[k], tf.float32) for k in feature_cols], axis=-1)
             return x, y
 
-        dataset = dataset.map(split_xy)
-
+        dataset = dataset.map(split_xy, num_parallel_calls=tf.data.AUTOTUNE)
         return dataset
 
     def configure_dataset(
@@ -132,20 +145,16 @@ class BaseModel(ABC):
     def prepare_data(
         self,
         spark,
-        src_dir: str,
         dst_dir: str,
-        dst_path: str,
-        target_column: bytes,
+        target_columns: list[bytes],
         train_ratio: float = 0.8,
         val_ratio: float = 0.1,
         **dataset_kwargs
     ) -> None:
-        self.copy_dataset_parquet(src_dir, dst_dir, dst_path)
-        
-        dataset = self.generate_io_dataset(dst_path, target_column)
+        dataset = self.generate_io_dataset(dst_dir, target_columns)
         
         self.train_dataset, self.val_dataset, self.test_dataset, self.input_shape = self.split_dataset(
-            spark, dst_path, dataset, train_ratio, val_ratio, **dataset_kwargs
+            spark, dst_dir, dataset, train_ratio, val_ratio, **dataset_kwargs
         )
 
     def create_model(self) -> tf.keras.Model:

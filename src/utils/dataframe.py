@@ -208,3 +208,32 @@ class MultiColumnOneHotEncoder:
             result_df = result_df.withColumn(col_name, one_hot_udf(F.col(input_column)))
         
         return result_df
+
+class SampleDataset:
+    def __init__(self):
+        pass
+    
+    def sample_dataset_weighted(
+        self, df: DataFrame, 
+        based_column: str,
+        scale : float = 1.0
+    ):
+
+        counts = df.groupBy(based_column).count().collect()
+
+        print("Counts:", counts)
+
+        total = sum([r["count"] for r in counts])
+        freqs = {r[based_column]: r["count"] / total for r in counts}
+
+        max_freq = max(freqs.values())
+        sampling_ratios = {cls: max_freq / f for cls, f in freqs.items()}        
+
+        print("Sampling ratios:", sampling_ratios)
+
+        scale = min(1.0, scale / max(sampling_ratios.values()))
+        sampling_fractions = {cls: min(1.0, v * scale) for cls, v in sampling_ratios.items()}
+
+        df_balanced = df.sampleBy(based_column, fractions=sampling_fractions, seed=42)
+
+        return df_balanced

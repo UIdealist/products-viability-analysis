@@ -11,7 +11,7 @@ class PCAEncoder:
         id_cols: list[str] = [],
         input_col: str = "tfidf",
         output_col: str = "pca_features",
-        k: int = 150
+        k: int = 150,
     ):
         self.id_cols = id_cols
         self.input_col = input_col
@@ -44,9 +44,6 @@ class PCAEncoder:
         os.makedirs(path, exist_ok=True)
         self.model.write().overwrite().save(os.path.join(path, "pca_model"))
         config = {
-            "input_col": self.input_col,
-            "output_col": self.output_col,
-            "id_cols": self.id_cols,
             "k": self.k,
             "p": 2
         }
@@ -57,10 +54,6 @@ class PCAEncoder:
         self.model = PCAModel.load(os.path.join(path, "pca_model"))
         with open(os.path.join(path, "config.json"), "r") as f:
             cfg = json.load(f)
-        self.input_col = cfg["input_col"]
-        self.output_col = cfg["output_col"]
-        self.pca_output_col = f"{self.output_col}_pca"
-        self.id_cols = cfg["id_cols"]
         self.k = cfg["k"]
         self.normalizer = Normalizer(inputCol=self.pca_output_col, outputCol=self.output_col, p=cfg["p"])
         return self

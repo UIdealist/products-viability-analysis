@@ -8,15 +8,15 @@ class BinaryModel(BaseModel):
 
     def _build_model(self) -> tf.keras.Model:
         model = tf.keras.Sequential([
-            tf.keras.layers.Input(shape=(self.input_shape,)),
-            tf.keras.layers.Dense(256, activation='relu'),
-            tf.keras.layers.Dropout(0.4),
-            tf.keras.layers.Dense(128, activation='relu'),
-            tf.keras.layers.Dropout(0.3),
-            tf.keras.layers.Dense(64, activation='relu'),
-            tf.keras.layers.Dropout(0.2),
-            tf.keras.layers.Dense(32, activation='relu'),
-            tf.keras.layers.Dense(1, activation='sigmoid')
+            tf.keras.layers.Input(shape=(self.input_shape,), name='input'),
+            tf.keras.layers.Dense(256, activation='relu', name='dense_0'),
+            tf.keras.layers.Dropout(0.4, name='dropout_0'),
+            tf.keras.layers.Dense(128, activation='relu', name='dense_1'),
+            tf.keras.layers.Dropout(0.3, name='dropout_1'),
+            tf.keras.layers.Dense(64, activation='relu', name='dense_2'),
+            tf.keras.layers.Dropout(0.2, name='dropout_2'),
+            tf.keras.layers.Dense(32, activation='relu', name='dense_3'),
+            tf.keras.layers.Dense(1, activation='sigmoid', name='output')
         ])
         
         model.compile(

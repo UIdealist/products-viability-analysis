@@ -49,9 +49,13 @@ class CategoryPredictionModel(BaseModel):
     def _build_model(self) -> tf.keras.Model:
         model = tf.keras.Sequential([
             tf.keras.layers.Input(shape=(self.input_shape,)),
-            tf.keras.layers.Dense(256, activation='relu'),
+            tf.keras.layers.Dense(1024, activation='relu'),
+            tf.keras.layers.BatchNormalization(),
+            tf.keras.layers.Dense(512, activation='relu'),
             tf.keras.layers.BatchNormalization(),
             tf.keras.layers.Dropout(0.3),
+            tf.keras.layers.Dense(256, activation='relu'),
+            tf.keras.layers.BatchNormalization(),
             tf.keras.layers.Dense(128, activation='relu'),
             tf.keras.layers.BatchNormalization(),
             tf.keras.layers.Dropout(0.3),

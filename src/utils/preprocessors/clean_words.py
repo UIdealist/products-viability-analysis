@@ -12,7 +12,7 @@ from sparknlp.annotator import SymmetricDeleteModel
 
 from symspellpy import SymSpell, Verbosity
 
-CHECK_SPELLING = True
+CHECK_SPELLING = False
 
 class CleanWords:
     def __init__(self):
@@ -141,6 +141,9 @@ class CleanWords:
     def clean_html(self, df, column_name):
         return df.withColumn(column_name, F.regexp_replace(F.col(column_name), "<[^>]+>", " "))
 
+    def clea_newlines_and_tabs(self, df, column_name):
+        return df.withColumn(column_name, F.regexp_replace(F.col(column_name), "\n|\t|\r|\f|\b|\a|\v|\0|\1", " "))
+
     def normalize_text(self, df, column_name):
         cleaned = self._normalize_text_with_functions(df, column_name, column_name)
         return cleaned
@@ -199,6 +202,12 @@ class CleanWords:
             column_name,
             F.transform(F.col(column_name), lambda x: F.regexp_replace(x, "<[^>]+>", " "))
         )
+
+    def clean_newlines_and_tabs_array(self, df, column_name):
+        return df.withColumn(
+            column_name,
+            F.transform(F.col(column_name), lambda x: F.regexp_replace(x, "\n|\t|\r|\f|\b|\a|\v|\0|\1", " "))
+        )
     
     def separate_emojis_array(self, df, column_name):
         emoji_pattern = (
@@ -230,13 +239,15 @@ class CleanWords:
     def transform_default_no_tokenization_array(self, df, column_name):
         clean_html = self.clean_html_array(df, column_name)
         clean_emojis = self.separate_emojis_array(clean_html, column_name)
-        return clean_emojis
+        clean_newlines_and_tabs = self.clean_newlines_and_tabs_array(clean_emojis, column_name)
+        return clean_newlines_and_tabs
     
     def transform_default_with_normalization_array(self, df, column_name):
         clean_html = self.clean_html_array(df, column_name)
         clean_emojis = self.separate_emojis_array(clean_html, column_name)
         clean_normalized = self.normalize_text_array(clean_emojis, column_name)
-        return clean_normalized
+        clean_newlines_and_tabs = self.clean_newlines_and_tabs_array(clean_normalized, column_name)
+        return clean_newlines_and_tabs
     
     def remove_stop_words_array(self, df, column_name):
         remover = self._get_stop_words_remover(column_name, column_name)

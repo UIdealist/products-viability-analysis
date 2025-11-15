@@ -236,4 +236,7 @@ class SampleDataset:
 
         df_balanced = df.sampleBy(based_column, fractions=sampling_fractions, seed=42)
 
+        counts_balanced = df_balanced.groupBy(based_column).count().collect()
+        print("Counts balanced:", counts_balanced)
+
         return df_balanced

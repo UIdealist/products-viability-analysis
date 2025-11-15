@@ -1,11 +1,17 @@
 import os
 import shutil
+from pyspark.sql import DataFrame
 import tensorflow as tf
 import tensorflow_io as tfio
 from abc import ABC, abstractmethod
 from typing import Tuple, Dict, Any, Optional, Union
 from ..mlflow_logger import MLflowModelLogger
+from tensorflow.keras.utils import plot_model as plot_keras_model
 import pyarrow.parquet as pq
+from graphviz import Digraph
+from tensorflow.keras.utils import model_to_dot
+import pydot
+import pyspark.sql.functions as F
 
 
 class BaseModel(ABC):
@@ -62,7 +68,9 @@ class BaseModel(ABC):
             x = tf.stack([tf.cast(row[k], tf.float32) for k in feature_cols], axis=-1)
             return x, y
 
-        dataset = dataset.map(split_xy, num_parallel_calls=tf.data.AUTOTUNE)
+        dataset = (
+            dataset.map(split_xy, num_parallel_calls=tf.data.AUTOTUNE)
+        )
         return dataset
 
     def configure_dataset(
@@ -85,13 +93,19 @@ class BaseModel(ABC):
         dataset: tf.data.Dataset,
         train_ratio: float = 0.8,
         val_ratio: float = 0.1,
+        max_records: Optional[int] = None,
         **dataset_kwargs
     ) -> Tuple[tf.data.Dataset, tf.data.Dataset, tf.data.Dataset, int]:
         original_parquet = spark.read.parquet(dst_path)
         total_records = original_parquet.count()
         
+        if max_records is not None:
+            total_records = min(total_records, max_records)
+            print(f"Limited dataset size to {total_records} records (max_records={max_records})")
+        
         sample_batch = next(iter(dataset.take(1)))
         X_sample, _ = sample_batch
+        print(X_sample.shape)
         input_shape = X_sample.shape[0]
         
         train_size = int(total_records * train_ratio)
@@ -149,12 +163,13 @@ class BaseModel(ABC):
         target_columns: list[bytes],
         train_ratio: float = 0.8,
         val_ratio: float = 0.1,
+        max_records: Optional[int] = None,
         **dataset_kwargs
     ) -> None:
         dataset = self.generate_io_dataset(dst_dir, target_columns)
         
         self.train_dataset, self.val_dataset, self.test_dataset, self.input_shape = self.split_dataset(
-            spark, dst_dir, dataset, train_ratio, val_ratio, **dataset_kwargs
+            spark, dst_dir, dataset, train_ratio, val_ratio, max_records=max_records, **dataset_kwargs
         )
 
     def create_model(self) -> tf.keras.Model:
@@ -187,10 +202,12 @@ class BaseModel(ABC):
     def _build_model(self) -> tf.keras.Model:
         pass
 
-    def predict(self, features):
+    def predict(self, df: DataFrame):
         if self.model is None:
             raise ValueError("Model not created. Call create_model() first.")
-        return self.model.predict(features)
+        features = df.toPandas().values
+        predictions = self.model.predict(features)
+        return predictions
 
     def save_model(self, path: str) -> None:
         if self.model is None:
@@ -284,3 +301,42 @@ class BaseModel(ABC):
     
     def plot_latest_model_history(self, save_path: Optional[str] = None):
         return self.mlflow_logger.plot_latest_model_history(self.model_name, save_path)
+
+    def plot_model(self, save_path="model_tiered_lr.png"):
+        dot = model_to_dot(
+            self.model,
+            show_shapes=True,
+            show_layer_names=True,
+            rankdir="LR",
+            expand_nested=True
+        )
+
+        dot.set_graph_defaults(
+            rankdir="LR",
+            ranksep="1.2",
+            nodesep="0.8",
+            splines="ortho",
+            concentrate="false",
+            newrank="true",
+            bgcolor="#ffffff"
+        )
+
+        for node in dot.get_node_list():
+            node.set_style("filled,rounded")
+            node.set_fillcolor("#1e1e1e")
+            node.set_fontcolor="#ffffff"
+            node.set_fontname("Arial")
+            node.set_fontsize("9")
+            node.set_color("#444444")
+            node.set_penwidth("1.0")
+
+        nodes = [n for n in dot.get_node_list() if n.get_name() not in ('node',)]
+        for i in range(0, len(nodes), 3):
+            subgraph = pydot.Cluster(f"cluster_row_{i}", label="", style="invis", rank="same")
+            for n in nodes[i:i+3]:
+                subgraph.add_node(n)
+            dot.add_subgraph(subgraph)
+
+        dot.write_png(save_path)
+        print(f"model plot saved to {save_path}")
+        return save_path

@@ -61,6 +61,8 @@ class SummarizeEncoding:
             df = df.select(
                 F.col(id_col).alias("id"),
                 F.col("weighted_embedding"),
+            ).filter(
+                F.col("id").isNotNull()
             ).groupBy("id").apply(
                 sum_weighted_embeddings
             ).select(

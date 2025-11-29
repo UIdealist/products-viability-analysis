@@ -12,10 +12,30 @@ from graphviz import Digraph
 from tensorflow.keras.utils import model_to_dot
 import pydot
 import pyspark.sql.functions as F
+from .dataset_splitter import DatasetSplitter
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import mlflow
+from sklearn.metrics import confusion_matrix
 
 
 class BaseModel(ABC):
-    def __init__(self, model_name: str, metastore_path: str, tracking_uri: str = "file:///tmp/mlruns"):
+    def __init__(
+        self, 
+        model_name: str, 
+        metastore_path: str, 
+        tracking_uri: str = "file:///tmp/mlruns",
+        spark_utils: Optional[Any] = None,
+        target_path: Optional[str] = None,
+        train_ratio: float = 0.8,
+        val_ratio: float = 0.1,
+        test_ratio: float = 0.1,
+        max_partitions: int = 10,
+        random_seed: int = 42, 
+        is_binary: bool = False,
+        is_sparse: bool = False
+    ):
         self.model_name = model_name
         self.metastore_path = metastore_path
         self.model = None
@@ -24,28 +44,40 @@ class BaseModel(ABC):
         self.val_dataset = None
         self.test_dataset = None
         self.run_id = None
+        self.y_true = None
+        self.y_pred = None
         self.mlflow_logger = MLflowModelLogger(
             experiment_name=model_name,
             tracking_uri=tracking_uri
         )
         
-    def copy_dataset_parquet(self, src_dir: str, dst_dir: str, dst_path: str) -> None:
-        os.makedirs(dst_dir, exist_ok=True)
-
-        parquet_files = [f for f in os.listdir(src_dir) if f.endswith(".parquet")]
-        if len(parquet_files) == 0:
-            raise FileNotFoundError(f"No parquet files found in {src_dir}")
-        elif len(parquet_files) > 1:
-            raise RuntimeError(f"Expected exactly one parquet file in {src_dir}, found {len(parquet_files)}")
-
-        src_path = os.path.join(src_dir, parquet_files[0])
-        shutil.copy(src_path, dst_path)
-
+        self.dataset_splitter = None
+        if spark_utils is not None and target_path is not None:
+            self.dataset_splitter = DatasetSplitter(
+                spark_utils=spark_utils,
+                delta_table_path=target_path,
+                train_ratio=train_ratio,
+                val_ratio=val_ratio,
+                test_ratio=test_ratio,
+                max_partitions=max_partitions,
+                random_seed=random_seed
+            )
+        self.is_binary = is_binary
+        self.num_classes = 2
+        self.is_sparse = is_sparse
+        
     def generate_io_dataset(
         self, 
-        dst_path: str, 
-        target_columns: list[bytes]
+        dst_path: Optional[str] = None,
+        target_columns: Optional[list[bytes]] = None,
+        dataset_type: Optional[str] = None
     ) -> tf.data.Dataset:
+        if self.dataset_splitter is not None and dataset_type is not None:
+            return self.dataset_splitter.generate_io_dataset(dataset_type, target_columns)
+        
+        if dst_path is None or target_columns is None:
+            raise ValueError("Either dataset_splitter with dataset_type must be provided, or dst_path and target_columns must be provided")
+        
         files = tf.io.gfile.glob(f"{dst_path}/*.parquet")
         if not files:
             return tf.data.Dataset.from_tensor_slices(([], []))
@@ -158,19 +190,36 @@ class BaseModel(ABC):
 
     def prepare_data(
         self,
-        spark,
-        dst_dir: str,
-        target_columns: list[bytes],
+        spark: Optional[Any] = None,
+        dst_dir: Optional[str] = None,
+        target_columns: Optional[list[bytes]] = None,
         train_ratio: float = 0.8,
         val_ratio: float = 0.1,
         max_records: Optional[int] = None,
+        overwrite: bool = False,
         **dataset_kwargs
     ) -> None:
-        dataset = self.generate_io_dataset(dst_dir, target_columns)
-        
-        self.train_dataset, self.val_dataset, self.test_dataset, self.input_shape = self.split_dataset(
-            spark, dst_dir, dataset, train_ratio, val_ratio, max_records=max_records, **dataset_kwargs
-        )
+        if self.dataset_splitter is not None:
+            train_dataset = self.generate_io_dataset(dataset_type='train', target_columns=target_columns)
+            val_dataset = self.generate_io_dataset(dataset_type='val', target_columns=target_columns)
+            test_dataset = self.generate_io_dataset(dataset_type='test', target_columns=target_columns)
+            
+            sample_batch = next(iter(train_dataset.take(1)))
+            X_sample, _ = sample_batch
+            self.input_shape = X_sample.shape[0]
+            
+            self.train_dataset = self.configure_dataset(train_dataset, **dataset_kwargs)
+            self.val_dataset = self.configure_dataset(val_dataset, **dataset_kwargs)
+            self.test_dataset = self.configure_dataset(test_dataset, **dataset_kwargs)
+        else:
+            if dst_dir is None or target_columns is None or spark is None:
+                raise ValueError("Either dataset_splitter must be initialized, or spark, dst_dir and target_columns must be provided")
+            
+            dataset = self.generate_io_dataset(dst_dir, target_columns)
+            
+            self.train_dataset, self.val_dataset, self.test_dataset, self.input_shape = self.split_dataset(
+                spark, dst_dir, dataset, train_ratio, val_ratio, max_records=max_records, **dataset_kwargs
+            )
 
     def create_model(self) -> tf.keras.Model:
         self.model = self._build_model()
@@ -223,6 +272,8 @@ class BaseModel(ABC):
                 model_name=self.model_name,
                 version=version
             )
+        self.run_id = run_id
+        self.history = self.get_training_history()
     
     def log_training_history(self, run_name: str, parameters: Optional[Dict[str, Any]] = None, tags: Optional[Dict[str, str]] = None) -> str:
         if self.model is None:
@@ -295,6 +346,7 @@ class BaseModel(ABC):
     def load_latest_model(self) -> None:
         self.model = self.mlflow_logger.load_latest_model(self.model_name)
         self.history = self.get_latest_model_history()
+        self.run_id = self.mlflow_logger.get_latest_model_run_id(self.model_name)
     
     def get_latest_model_history(self) -> Dict[str, list]:
         return self.mlflow_logger.get_latest_model_history(self.model_name)
@@ -302,7 +354,7 @@ class BaseModel(ABC):
     def plot_latest_model_history(self, save_path: Optional[str] = None):
         return self.mlflow_logger.plot_latest_model_history(self.model_name, save_path)
 
-    def plot_model(self, save_path="model_tiered_lr.png"):
+    def plot_model(self, save_path="model_tiered_lr.png", levels = 3):
         dot = model_to_dot(
             self.model,
             show_shapes=True,
@@ -322,8 +374,8 @@ class BaseModel(ABC):
         )
 
         for node in dot.get_node_list():
-            node.set_style("filled,rounded")
-            node.set_fillcolor("#1e1e1e")
+            node.set_style("rounded")
+            node.set_fillcolor("#ffffff")
             node.set_fontcolor="#ffffff"
             node.set_fontname("Arial")
             node.set_fontsize("9")
@@ -331,12 +383,184 @@ class BaseModel(ABC):
             node.set_penwidth("1.0")
 
         nodes = [n for n in dot.get_node_list() if n.get_name() not in ('node',)]
-        for i in range(0, len(nodes), 3):
+        for i in range(0, len(nodes), levels):
             subgraph = pydot.Cluster(f"cluster_row_{i}", label="", style="invis", rank="same")
-            for n in nodes[i:i+3]:
+            for n in nodes[i:i+levels]:
                 subgraph.add_node(n)
             dot.add_subgraph(subgraph)
 
         dot.write_png(save_path)
         print(f"model plot saved to {save_path}")
         return save_path
+
+    def prediction_simple(self, x):
+        predictions = self.model.predict(x, verbose=0)
+        return predictions
+
+    def evaluate_test_dataset(
+        self,
+        dataset: Optional[tf.data.Dataset] = None,
+        force_recalculate: bool = False
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        if self.model is None:
+            raise ValueError("Model not created. Call create_model() or load_model() first.")
+        
+        if not force_recalculate and self.y_true is not None and self.y_pred is not None:
+            print("Using cached evaluation results")
+            return self.y_true, self.y_pred
+        
+        if dataset is None:
+            dataset = self.test_dataset
+            if dataset is None:
+                raise ValueError("No test dataset available. Please provide a dataset or ensure test_dataset is set.")
+        
+        print("Calculating predictions on test dataset...")
+        y_true_list = []
+        y_pred_list = []
+        
+        for x, y in dataset:
+            predictions = self.prediction_simple(x)
+            y_true_list.append(y)
+            y_pred_list.append(predictions)
+        
+        self.y_true = np.concatenate(y_true_list, axis=0)
+        self.y_pred = np.concatenate(y_pred_list, axis=0)
+        
+        print(f"Evaluation complete: {len(self.y_true)} samples")
+        print(f"y_true shape: {self.y_true.shape}, y_pred shape: {self.y_pred.shape}")
+        
+        return self.y_true, self.y_pred
+
+    def plot_confusion_matrix(
+        self,
+        dataset: Optional[tf.data.Dataset] = None,
+        y_true: Optional[np.ndarray] = None,
+        y_pred: Optional[np.ndarray] = None,
+        class_names: Optional[list] = None,
+        save_path: Optional[str] = None,
+        figsize: Tuple[int, int] = (10, 8),
+        normalize: bool = False,
+        title: Optional[str] = None,
+        xlabel: Optional[str] = None,
+        ylabel: Optional[str] = None,
+        title_fontsize: int = 16,
+        label_fontsize: int = 12,
+        tick_fontsize: Optional[int] = None,
+        annot_fontsize: Optional[int] = None,
+        x_tick_rotation: float = 45,
+        y_tick_rotation: float = 0,
+        x_tick_ha: Optional[str] = 'right',
+        y_tick_ha: Optional[str] = None,
+        x_tick_labels: Optional[list] = None,
+        y_tick_labels: Optional[list] = None
+    ):
+        if self.model is None:
+            raise ValueError("Model not created. Call create_model() or load_model() first.")
+        
+        if save_path is None:
+            save_path = f"{self.metastore_path}/warehouse/gold.premodeling/{self.model_name}/confusion_matrix.png"
+        
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        
+        if y_true is not None and y_pred is not None:
+            y_true = np.copy(y_true)
+            y_pred = np.copy(y_pred)
+        elif dataset is not None or self.test_dataset is not None:
+            y_true, y_pred = self.evaluate_test_dataset(dataset=dataset)
+            y_true = np.copy(y_true)
+            y_pred = np.copy(y_pred)
+        else:
+            raise ValueError("Either provide y_true and y_pred, a dataset, or ensure test_dataset is set.")
+        
+        if y_true.ndim > 1 and not self.is_binary and not self.is_sparse:
+            y_true = np.argmax(y_true, axis=1)
+        
+        if y_pred.ndim > 1 and not self.is_binary:
+            y_pred = np.argmax(y_pred, axis=1)
+        
+        cm = confusion_matrix(y_true, y_pred)
+        
+        if normalize:
+            cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        
+        if class_names is None:
+            class_names = [f'Class {i}' for i in range(self.num_classes)]
+        
+        x_tick_labels_final = x_tick_labels if x_tick_labels is not None else class_names
+        y_tick_labels_final = y_tick_labels if y_tick_labels is not None else class_names
+        
+        if title is None:
+            title = f'Confusion Matrix - {self.model_name}'
+        
+        if xlabel is None:
+            xlabel = 'Predicted Label'
+        
+        if ylabel is None:
+            ylabel = 'True Label'
+        
+        plt.figure(figsize=figsize)
+        
+        annot_kws = {}
+        if annot_fontsize is not None:
+            annot_kws['fontsize'] = annot_fontsize
+        
+        sns.heatmap(
+            cm,
+            annot=True,
+            fmt='.2f' if normalize else 'd',
+            cmap='Blues',
+            xticklabels=x_tick_labels_final,
+            yticklabels=y_tick_labels_final,
+            cbar_kws={'label': 'Normalized Count' if normalize else 'Count'},
+            annot_kws=annot_kws if annot_kws else None
+        )
+        
+        plt.title(title, fontsize=title_fontsize, fontweight='bold')
+        plt.xlabel(xlabel, fontsize=label_fontsize)
+        plt.ylabel(ylabel, fontsize=label_fontsize)
+        
+        xtick_kwargs = {'rotation': x_tick_rotation}
+        ytick_kwargs = {'rotation': y_tick_rotation}
+        
+        if x_tick_ha is not None:
+            xtick_kwargs['ha'] = x_tick_ha
+        if y_tick_ha is not None:
+            ytick_kwargs['ha'] = y_tick_ha
+        if tick_fontsize is not None:
+            xtick_kwargs['fontsize'] = tick_fontsize
+            ytick_kwargs['fontsize'] = tick_fontsize
+        
+        plt.xticks(**xtick_kwargs)
+        plt.yticks(**ytick_kwargs)
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"Confusion matrix saved to {save_path}")
+            
+            # Log to MLflow if there's an active run
+            try:
+                if hasattr(self, 'run_id') and self.run_id:
+                    mlflow.log_artifact(save_path, artifact_path="confusion_matrix")
+                    print(f"Confusion matrix logged to MLflow run {self.run_id}")
+                elif hasattr(self, 'mlflow_logger'):
+                    # If no active run, start one or log to the latest
+                    try:
+                        runs = mlflow.search_runs(
+                            experiment_ids=[self.mlflow_logger.experiment_id],
+                            order_by=["start_time desc"],
+                            max_results=1
+                        )
+                        if not runs.empty:
+                            latest_run_id = runs.iloc[0]['run_id']
+                            mlflow.log_artifact(save_path, artifact_path="confusion_matrix", run_id=latest_run_id)
+                            print(f"Confusion matrix logged to MLflow run {latest_run_id}")
+                    except Exception as e:
+                        print(f"Could not log confusion matrix to MLflow: {e}")
+            except Exception as e:
+                print(f"Error logging confusion matrix to MLflow: {e}")
+        
+        plt.show()
+        
+        return cm

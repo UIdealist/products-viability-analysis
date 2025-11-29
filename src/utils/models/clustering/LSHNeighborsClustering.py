@@ -58,6 +58,11 @@ class LSHNeighborsClustering:
         self.baching_df = None
         self.batch_size = batch_size
 
+        self.pairs_path = self.spark_utils.path(
+            f"lsh_pairs_{self.table_prefix}_{self.lsh_parameters.comb_id}",
+            catalog = self.catalog
+        )
+
     def prepare_batching(self, df: DataFrame) -> DataFrame:
         batching_df = df.select(
             F.col(self.id_col),
@@ -157,10 +162,7 @@ class LSHNeighborsClustering:
         self, df: DataFrame,
         overwrite_full: bool = False
     ) -> DataFrame:
-        target_path = self.spark_utils.path(
-            f"lsh_pairs_{self.table_prefix}_{self.lsh_parameters.comb_id}",
-            catalog = self.catalog
-        )
+        target_path = self.pairs_path
 
         processed_target_path = self.spark_utils.path(
             f"lsh_pairs_processed_{self.table_prefix}_{self.lsh_parameters.comb_id}",

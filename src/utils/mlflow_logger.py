@@ -241,6 +241,10 @@ class MLflowModelLogger:
         if not history['loss']:
             print("No training history found for this run")
             return
+
+        # Last result uses to be the same as the first result, so we need to remove the last result
+        for key in history:
+            history[key] = history[key][:-1]
         
         epochs = range(1, len(history['loss']) + 1)
         
@@ -308,6 +312,10 @@ class MLflowModelLogger:
         model_uri = f"runs:/{run_id}/model"
         loaded_model_mlflow = mlflow.tensorflow.load_model(model_uri)
         return loaded_model_mlflow
+
+    def get_latest_model_run_id(self, model_name: str = "model") -> str:
+        runs = mlflow.search_runs(experiment_ids=[self.experiment_id], order_by=["start_time desc"], max_results=1)
+        return runs.iloc[0]['run_id']
     
     def get_latest_model_history(self, model_name: str = "model") -> Dict[str, list]:
         runs = mlflow.search_runs(experiment_ids=[self.experiment_id], order_by=["start_time desc"], max_results=1)

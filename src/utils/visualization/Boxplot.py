@@ -10,6 +10,33 @@ from dataclasses import dataclass
 from pyspark.sql import DataFrame
 from matplotlib.patches import Patch
 
+COLD_COLOR_PALETTE = [
+    '#687B8B',
+    '#ADE1F5',
+    '#4F79BD',
+    '#4A9B9B',
+    '#4A8B4A',
+    '#6B4C93',
+    '#8B6FA8',
+    '#6BB3B3',
+    '#6BA86B',
+    '#3A5A8A',
+    '#4A2C5F',
+    '#2F6B6B',
+    '#2F5A2F',
+    '#5A8BC4',
+    '#7A5FA3',
+    '#5AABAB',
+    '#5A9B5A',
+]
+plt.rcParams['font.family'] = 'Times New Roman'
+plt.rcParams['axes.labelsize'] = 12
+plt.rcParams['axes.titlesize'] = 14
+plt.rcParams['xtick.labelsize'] = 10
+plt.rcParams['ytick.labelsize'] = 10
+plt.rcParams['legend.fontsize'] = 10
+plt.rcParams['figure.titlesize'] = 16
+
 class BoxplotMode(Enum):
     SINGLE = 'single'
     MATRIX = 'matrix'
@@ -32,7 +59,7 @@ class BoxMatrixPlot:
         axes = axes.flatten() if n > 1 else [axes]
 
         sns.set_theme(style="white", context="talk")
-        palette = sns.color_palette(["#4c72b0"])
+        palette = [COLD_COLOR_PALETTE[0]]
 
         for i, d in enumerate(data):
             values = d["values"]
@@ -46,7 +73,7 @@ class BoxMatrixPlot:
                 color=palette, edgecolor="white", linewidth=1.2
             )
 
-            ax.set_ylabel(ylabel, fontsize=2)
+            ax.set_ylabel(ylabel, fontsize=12)
             ax.set_xticklabels([])
             ax.set_title(subtitle, fontsize=13, fontweight="bold")
 
@@ -72,10 +99,11 @@ class BoxSinglePlot:
 
     def plot(self, data, ylabel='Valor', xlabel="", samples = 500):
         sns.set_theme(style="white", context="talk")
+        palette = [COLD_COLOR_PALETTE[i % len(COLD_COLOR_PALETTE)] for i in range(len(data) if hasattr(data, '__len__') else 1)]
         sns.boxplot(
             x=[xlabel] * len(data),
             y=data,
-            palette="Set2",
+            palette=palette,
             width=0.6,
             fliersize=4,
             linewidth=1.5,

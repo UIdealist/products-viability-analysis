@@ -233,7 +233,29 @@ class MLflowModelLogger:
         
         return history
     
-    def plot_training_history(self, run_id: str, save_path: Optional[str] = None):
+    def plot_training_history(
+        self, run_id: str, save_path: Optional[str] = None, 
+        direction: Optional[str] = 'vertical',
+        legend_size: Optional[float] = None,
+        tick_size: Optional[float] = None,
+        label_size: Optional[float] = None,
+        title_size: Optional[float] = None,
+        figure_size: Optional[tuple] = None,
+        loss_title: Optional[str] = None,
+        accuracy_title: Optional[str] = None,
+        loss_xlabel: Optional[str] = None,
+        loss_ylabel: Optional[str] = None,
+        accuracy_xlabel: Optional[str] = None,
+        accuracy_ylabel: Optional[str] = None,
+        loss_train_label: Optional[str] = None,
+        loss_val_label: Optional[str] = None,
+        accuracy_train_label: Optional[str] = None,
+        accuracy_val_label: Optional[str] = None,
+        primary_color: Optional[str] = None,
+        secondary_color: Optional[str] = None,
+        font_family: Optional[str] = None,
+        grid: Optional[bool] = None
+    ):
         import matplotlib.pyplot as plt
         
         history = self.get_training_history(run_id)
@@ -248,26 +270,77 @@ class MLflowModelLogger:
         
         epochs = range(1, len(history['loss']) + 1)
         
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+        primary_color = primary_color if primary_color is not None else '#193169'
+        secondary_color = secondary_color if secondary_color is not None else '#0000FF'
+        font_family = font_family if font_family is not None else 'Times New Roman'
+        grid = grid if grid is not None else True
         
-        ax1.plot(epochs, history['loss'], 'b-', label='Training Loss')
+        loss_title = loss_title if loss_title is not None else 'Pérdida - Modelo'
+        accuracy_title = accuracy_title if accuracy_title is not None else 'Precisión - Modelo'
+        loss_xlabel = loss_xlabel if loss_xlabel is not None else 'Época'
+        loss_ylabel = loss_ylabel if loss_ylabel is not None else 'Pérdida'
+        accuracy_xlabel = accuracy_xlabel if accuracy_xlabel is not None else 'Época'
+        accuracy_ylabel = accuracy_ylabel if accuracy_ylabel is not None else 'Precisión'
+        loss_train_label = loss_train_label if loss_train_label is not None else 'Pérdida - Entrenamiento'
+        loss_val_label = loss_val_label if loss_val_label is not None else 'Pérdida - Validación'
+        accuracy_train_label = accuracy_train_label if accuracy_train_label is not None else 'Precisión - Entrenamiento'
+        accuracy_val_label = accuracy_val_label if accuracy_val_label is not None else 'Precisión - Validación'
+        
+        plt.rcParams['font.family'] = font_family
+        
+        if direction == 'vertical':
+            figsize = figure_size if figure_size is not None else (12, 4)
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+        elif direction == 'horizontal':
+            figsize = figure_size if figure_size is not None else (12, 10)
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize)
+        
+        ax1.plot(epochs, history['loss'], color=primary_color, linestyle='-', label=loss_train_label)
         if history['val_loss']:
-            ax1.plot(epochs, history['val_loss'], 'r-', label='Validation Loss')
-        ax1.set_title('Model Loss')
-        ax1.set_xlabel('Epoch')
-        ax1.set_ylabel('Loss')
-        ax1.legend()
-        ax1.grid(True)
+            ax1.plot(epochs, history['val_loss'], color=secondary_color, linestyle='-', label=loss_val_label)
+        ax1.set_title(loss_title)
+        ax1.set_xlabel(loss_xlabel)
+        ax1.set_ylabel(loss_ylabel)
+        
+        if title_size is not None:
+            ax1.title.set_fontsize(title_size)
+        if label_size is not None:
+            ax1.xaxis.label.set_fontsize(label_size)
+            ax1.yaxis.label.set_fontsize(label_size)
+        if tick_size is not None:
+            ax1.tick_params(axis='both', labelsize=tick_size)
+        
+        if legend_size is not None:
+            ax1.legend(fontsize=legend_size)
+        else:
+            ax1.legend()
+        
+        if grid:
+            ax1.grid(True)
         
         if history['accuracy']:
-            ax2.plot(epochs, history['accuracy'], 'b-', label='Training Accuracy')
+            ax2.plot(epochs, history['accuracy'], color=primary_color, linestyle='-', label=accuracy_train_label)
         if history['val_accuracy']:
-            ax2.plot(epochs, history['val_accuracy'], 'r-', label='Validation Accuracy')
-        ax2.set_title('Model Accuracy')
-        ax2.set_xlabel('Epoch')
-        ax2.set_ylabel('Accuracy')
-        ax2.legend()
-        ax2.grid(True)
+            ax2.plot(epochs, history['val_accuracy'], color=secondary_color, linestyle='-', label=accuracy_val_label)
+        ax2.set_title(accuracy_title)
+        ax2.set_xlabel(accuracy_xlabel)
+        ax2.set_ylabel(accuracy_ylabel)
+        
+        if title_size is not None:
+            ax2.title.set_fontsize(title_size)
+        if label_size is not None:
+            ax2.xaxis.label.set_fontsize(label_size)
+            ax2.yaxis.label.set_fontsize(label_size)
+        if tick_size is not None:
+            ax2.tick_params(axis='both', labelsize=tick_size)
+        
+        if legend_size is not None:
+            ax2.legend(fontsize=legend_size)
+        else:
+            ax2.legend()
+        
+        if grid:
+            ax2.grid(True)
         
         plt.tight_layout()
         
@@ -322,7 +395,50 @@ class MLflowModelLogger:
         run_id = runs.iloc[0]['run_id']
         return self.get_training_history(run_id)
     
-    def plot_latest_model_history(self, model_name: str = "model", save_path: Optional[str] = None):
+    def plot_latest_model_history(
+        self, model_name: str = "model", save_path: Optional[str] = None, 
+        direction: Optional[str] = 'vertical',
+        legend_size: Optional[float] = None,
+        tick_size: Optional[float] = None,
+        label_size: Optional[float] = None,
+        title_size: Optional[float] = None,
+        figure_size: Optional[tuple] = None,
+        loss_title: Optional[str] = None,
+        accuracy_title: Optional[str] = None,
+        loss_xlabel: Optional[str] = None,
+        loss_ylabel: Optional[str] = None,
+        accuracy_xlabel: Optional[str] = None,
+        accuracy_ylabel: Optional[str] = None,
+        loss_train_label: Optional[str] = None,
+        loss_val_label: Optional[str] = None,
+        accuracy_train_label: Optional[str] = None,
+        accuracy_val_label: Optional[str] = None,
+        primary_color: Optional[str] = None,
+        secondary_color: Optional[str] = None,
+        font_family: Optional[str] = None,
+        grid: Optional[bool] = None
+    ):
         runs = mlflow.search_runs(experiment_ids=[self.experiment_id], order_by=["start_time desc"], max_results=1)
         run_id = runs.iloc[0]['run_id']
-        return self.plot_training_history(run_id, save_path)
+        return self.plot_training_history(
+            run_id, save_path, direction,
+            legend_size=legend_size,
+            tick_size=tick_size,
+            label_size=label_size,
+            title_size=title_size,
+            figure_size=figure_size,
+            loss_title=loss_title,
+            accuracy_title=accuracy_title,
+            loss_xlabel=loss_xlabel,
+            loss_ylabel=loss_ylabel,
+            accuracy_xlabel=accuracy_xlabel,
+            accuracy_ylabel=accuracy_ylabel,
+            loss_train_label=loss_train_label,
+            loss_val_label=loss_val_label,
+            accuracy_train_label=accuracy_train_label,
+            accuracy_val_label=accuracy_val_label,
+            primary_color=primary_color,
+            secondary_color=secondary_color,
+            font_family=font_family,
+            grid=grid
+        )

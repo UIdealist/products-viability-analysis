@@ -3,6 +3,37 @@ from matplotlib.ticker import FuncFormatter, PercentFormatter
 import seaborn as sns
 import numpy as np
 from src.utils.text import format_number
+from src.utils.visualization.Barplot import COLD_COLOR_PALETTE as BARPLOT_COLD_COLOR_PALETTE
+
+BAR_PRIMARY_COLOR = BARPLOT_COLD_COLOR_PALETTE[0]
+BAR_SECONDARY_COLOR = BARPLOT_COLD_COLOR_PALETTE[1]
+
+COLD_COLOR_PALETTE = [
+    '#687B8B',
+    '#ADE1F5',
+    '#4F79BD',
+    '#4A9B9B',
+    '#4A8B4A',
+    '#6B4C93',
+    '#8B6FA8',
+    '#6BB3B3',
+    '#6BA86B',
+    '#3A5A8A',
+    '#4A2C5F',
+    '#2F6B6B',
+    '#2F5A2F',
+    '#5A8BC4',
+    '#7A5FA3',
+    '#5AABAB',
+    '#5A9B5A',
+]
+plt.rcParams['font.family'] = 'Times New Roman'
+plt.rcParams['axes.labelsize'] = 12
+plt.rcParams['axes.titlesize'] = 14
+plt.rcParams['xtick.labelsize'] = 10
+plt.rcParams['ytick.labelsize'] = 10
+plt.rcParams['legend.fontsize'] = 10
+plt.rcParams['figure.titlesize'] = 16
 
 class HistPlot:
     def __init__(self, title: str):
@@ -16,7 +47,7 @@ class HistPlot:
         ylabel: str = "Frequency",
         is_percentage: bool = False,
         decimal_points: int = 1,
-        color: str = "#4c72b0",
+        color: str = BAR_PRIMARY_COLOR,
         figsize=(8,6),
         x_font_size: int = 12,
         y_font_size: int = 12,
@@ -27,13 +58,12 @@ class HistPlot:
         x_label_rotation: int = 45,
     ):
         sns.set_theme(style="white", context="talk")
+        plt.rcParams["font.family"] = "Times New Roman"
 
         fig, ax = plt.subplots(figsize=figsize)
 
 
-        base_colors = ["#4c72b0", "#55a3ff", "#2c5aa0", "#1e3d72", "#0f1f3a"]
-
-        hist_color = base_colors[0]
+        hist_color = BAR_PRIMARY_COLOR if color == "#4c72b0" or color == "#4F79BD" or color == "#193169" else color
         counts, bin_edges, patches = ax.hist(
             values,
             bins=bins,
@@ -150,6 +180,7 @@ class MultiHistPlot:
         x_label_rotation: int = 45,
     ):
         sns.set_theme(style="white", context="talk")
+        plt.rcParams["font.family"] = "Times New Roman"
 
 
         n_histograms = len(data_list)
@@ -176,8 +207,6 @@ class MultiHistPlot:
             axes = axes.flatten()
 
 
-        base_colors = ["#4c72b0", "#55a3ff", "#2c5aa0", "#1e3d72", "#0f1f3a"]
-
         all_counts = []
         all_values = []
 
@@ -187,7 +216,7 @@ class MultiHistPlot:
             subtitle = data.get("title", label)
             ax = axes[i]
 
-            hist_color = base_colors[i % len(base_colors)]
+            hist_color = BAR_PRIMARY_COLOR if i % 2 == 0 else BAR_SECONDARY_COLOR
 
             counts, bin_edges, patches = ax.hist(
                 values,

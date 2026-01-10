@@ -1,5 +1,6 @@
 import os
 import shutil
+import re
 from pyspark.sql import DataFrame
 import tensorflow as tf
 import tensorflow_io as tfio
@@ -330,10 +331,53 @@ class BaseModel(ABC):
             raise ValueError("Model not logged. Call log_training_history() first.")
         return self.mlflow_logger.get_training_history(self.run_id)
     
-    def plot_training_history(self, save_path: Optional[str] = None):
+    def plot_training_history(
+        self, save_path: Optional[str] = None,
+        direction: Optional[str] = 'vertical',
+        legend_size: Optional[float] = None,
+        tick_size: Optional[float] = None,
+        label_size: Optional[float] = None,
+        title_size: Optional[float] = None,
+        figure_size: Optional[tuple] = None,
+        loss_title: Optional[str] = None,
+        accuracy_title: Optional[str] = None,
+        loss_xlabel: Optional[str] = None,
+        loss_ylabel: Optional[str] = None,
+        accuracy_xlabel: Optional[str] = None,
+        accuracy_ylabel: Optional[str] = None,
+        loss_train_label: Optional[str] = None,
+        loss_val_label: Optional[str] = None,
+        accuracy_train_label: Optional[str] = None,
+        accuracy_val_label: Optional[str] = None,
+        primary_color: Optional[str] = None,
+        secondary_color: Optional[str] = None,
+        font_family: Optional[str] = None,
+        grid: Optional[bool] = None
+    ):
         if self.run_id is None:
             raise ValueError("Model not logged. Call log_training_history() first.")
-        return self.mlflow_logger.plot_training_history(self.run_id, save_path)
+        return self.mlflow_logger.plot_training_history(
+            self.run_id, save_path, direction,
+            legend_size=legend_size,
+            tick_size=tick_size,
+            label_size=label_size,
+            title_size=title_size,
+            figure_size=figure_size,
+            loss_title=loss_title,
+            accuracy_title=accuracy_title,
+            loss_xlabel=loss_xlabel,
+            loss_ylabel=loss_ylabel,
+            accuracy_xlabel=accuracy_xlabel,
+            accuracy_ylabel=accuracy_ylabel,
+            loss_train_label=loss_train_label,
+            loss_val_label=loss_val_label,
+            accuracy_train_label=accuracy_train_label,
+            accuracy_val_label=accuracy_val_label,
+            primary_color=primary_color,
+            secondary_color=secondary_color,
+            font_family=font_family,
+            grid=grid
+        )
     
     def list_available_models(self, model_name: str = None, limit: int = 10) -> None:
         target_model_name = model_name or self.model_name
@@ -351,10 +395,55 @@ class BaseModel(ABC):
     def get_latest_model_history(self) -> Dict[str, list]:
         return self.mlflow_logger.get_latest_model_history(self.model_name)
     
-    def plot_latest_model_history(self, save_path: Optional[str] = None):
-        return self.mlflow_logger.plot_latest_model_history(self.model_name, save_path)
+    def plot_latest_model_history(
+        self, save_path: Optional[str] = None,
+        direction: Optional[str] = 'vertical',
+        legend_size: Optional[float] = None,
+        tick_size: Optional[float] = None,
+        label_size: Optional[float] = None,
+        title_size: Optional[float] = None,
+        figure_size: Optional[tuple] = None,
+        loss_title: Optional[str] = None,
+        accuracy_title: Optional[str] = None,
+        loss_xlabel: Optional[str] = None,
+        loss_ylabel: Optional[str] = None,
+        accuracy_xlabel: Optional[str] = None,
+        accuracy_ylabel: Optional[str] = None,
+        loss_train_label: Optional[str] = None,
+        loss_val_label: Optional[str] = None,
+        accuracy_train_label: Optional[str] = None,
+        accuracy_val_label: Optional[str] = None,
+        primary_color: Optional[str] = None,
+        secondary_color: Optional[str] = None,
+        font_family: Optional[str] = None,
+        grid: Optional[bool] = None
+    ):
+        return self.mlflow_logger.plot_latest_model_history(
+            self.model_name, save_path, direction,
+            legend_size=legend_size,
+            tick_size=tick_size,
+            label_size=label_size,
+            title_size=title_size,
+            figure_size=figure_size,
+            loss_title=loss_title,
+            accuracy_title=accuracy_title,
+            loss_xlabel=loss_xlabel,
+            loss_ylabel=loss_ylabel,
+            accuracy_xlabel=accuracy_xlabel,
+            accuracy_ylabel=accuracy_ylabel,
+            loss_train_label=loss_train_label,
+            loss_val_label=loss_val_label,
+            accuracy_train_label=accuracy_train_label,
+            accuracy_val_label=accuracy_val_label,
+            primary_color=primary_color,
+            secondary_color=secondary_color,
+            font_family=font_family,
+            grid=grid
+        )
 
-    def plot_model(self, save_path="model_tiered_lr.png", levels = 3):
+    def plot_model(self, save_path="model_tiered_lr.png", levels=3, cluster_sizes=None):
+        import pydot
+
         dot = model_to_dot(
             self.model,
             show_shapes=True,
@@ -362,6 +451,8 @@ class BaseModel(ABC):
             rankdir="LR",
             expand_nested=True
         )
+
+        dot.set_name("")
 
         dot.set_graph_defaults(
             rankdir="LR",
@@ -373,22 +464,121 @@ class BaseModel(ABC):
             bgcolor="#ffffff"
         )
 
-        for node in dot.get_node_list():
-            node.set_style("rounded")
+        dot.set_node_defaults(
+            style="filled",
+            fillcolor="#ffffff",
+            fontcolor="#000000",
+            fontname="Times New Roman",
+            fontsize="12",
+            color="#ffffff",
+            penwidth="1.0"
+        )
+
+        nodes = [n for n in dot.get_node_list() if n.get_name() not in ("node",)]
+
+        for node in nodes:
+            label = node.get_label()
+            if label:
+                if 'bgcolor="black"' in label:
+                    label = label.replace('bgcolor="black"', 'bgcolor="#193169"')
+                if '<font' in label:
+                    if 'face="Times New Roman"' in label:
+                        pass
+                    elif 'face=' in label:
+                        label = re.sub(r'face="[^"]*"', 'face="Times New Roman"', label)
+                    else:
+                        label = label.replace('<font', '<font face="Times New Roman"')
+                node.set_label(label)
+            node.set_style("filled")
             node.set_fillcolor("#ffffff")
-            node.set_fontcolor="#ffffff"
-            node.set_fontname("Arial")
-            node.set_fontsize("9")
-            node.set_color("#444444")
+            node.set_fontcolor("#000000")
+            node.set_fontname("Times New Roman")
+            node.set_fontsize("12")
+            node.set_color("#ffffff")
             node.set_penwidth("1.0")
 
-        nodes = [n for n in dot.get_node_list() if n.get_name() not in ('node',)]
-        for i in range(0, len(nodes), levels):
-            subgraph = pydot.Cluster(f"cluster_row_{i}", label="", style="invis", rank="same")
-            for n in nodes[i:i+levels]:
-                subgraph.add_node(n)
-            dot.add_subgraph(subgraph)
+        for edge in dot.get_edge_list():
+            edge.set_constraint("false")
 
+        clusters = []
+        node_idx = 0
+
+        if cluster_sizes:
+            for size in cluster_sizes:
+                if node_idx >= len(nodes):
+                    break
+                if size <= 0:
+                    continue
+                actual = min(size, len(nodes) - node_idx)
+                clusters.append(nodes[node_idx:node_idx + actual])
+                node_idx += actual
+
+        while node_idx < len(nodes):
+            actual = min(levels, len(nodes) - node_idx)
+            clusters.append(nodes[node_idx:node_idx + actual])
+            node_idx += actual
+
+        cluster_graphs = []
+        for i, group in enumerate(clusters):
+            sg = pydot.Cluster(
+                f"cluster_{i}",
+                label="",
+                style="invis",
+                rank="same"
+            )
+            for n in group:
+                sg.add_node(n)
+            dot.add_subgraph(sg)
+            cluster_graphs.append(group)
+
+        for i in range(len(cluster_graphs) - 1):
+            a = cluster_graphs[i][0]
+            b = cluster_graphs[i + 1][0]
+            dot.add_edge(pydot.Edge(a, b, style="invis", label=""))
+
+        last_cluster_idx = len(cluster_graphs) - 1
+        current_cluster_idx = 0
+        
+        for sg in dot.get_subgraph_list():
+            is_last_cluster = (current_cluster_idx == last_cluster_idx)
+            for n in sg.get_node_list():
+                if n.get_name() == 'node':
+                    continue
+                label = n.get_label()
+                if label:
+                    if 'bgcolor="black"' in label:
+                        if is_last_cluster:
+                            label = label.replace('bgcolor="black"', 'bgcolor="white"')
+                        else:
+                            label = label.replace('bgcolor="black"', 'bgcolor="#193169"')
+                    if '<font' in label:
+                        if 'face="Times New Roman"' in label:
+                            pass
+                        elif 'face=' in label:
+                            label = re.sub(r'face="[^"]*"', 'face="Times New Roman"', label)
+                        else:
+                            label = label.replace('<font', '<font face="Times New Roman"')
+                    n.set_label(label)
+            current_cluster_idx += 1
+
+        dot.set_label("")
+
+        if "label" in dot.obj_dict["attributes"]:
+            del dot.obj_dict["attributes"]["label"]
+
+        for n in dot.get_node_list():
+            if n.get_name() == "graph":
+                dot.del_node(n.get_name())
+
+        dot_str = dot.to_string()
+        dot_str = re.sub(r'\s+label\s*=\s*"[^"]*graph[^"]*"', '', dot_str, flags=re.IGNORECASE)
+        dot_str = re.sub(r'\s+xlabel\s*=\s*"[^"]*graph[^"]*"', '', dot_str, flags=re.IGNORECASE)
+        dot_str = re.sub(r'[^\n]*->\s*"graph"[^\n]*;', '', dot_str)
+        dot_str = re.sub(r'[^\n]*->\s*graph[^\n]*;', '', dot_str)
+        dot_str = re.sub(r'graph\s*\[[^\]]*\][^\n]*', '', dot_str)
+        dot_str = re.sub(r'subgraph\s+cluster_cluster_\d+\s*\{[^}]*graph\s*\[[^\]]*\][^}]*\}', '', dot_str, flags=re.DOTALL)
+        dot = pydot.graph_from_dot_data(dot_str)[0]
+    
         dot.write_png(save_path)
         print(f"model plot saved to {save_path}")
         return save_path
@@ -438,7 +628,8 @@ class BaseModel(ABC):
         y_pred: Optional[np.ndarray] = None,
         class_names: Optional[list] = None,
         save_path: Optional[str] = None,
-        figsize: Tuple[int, int] = (10, 8),
+        figsize: Optional[Tuple[int, int]] = None,
+        square_size: Optional[float] = None,
         normalize: bool = False,
         title: Optional[str] = None,
         xlabel: Optional[str] = None,
@@ -452,7 +643,17 @@ class BaseModel(ABC):
         x_tick_ha: Optional[str] = 'right',
         y_tick_ha: Optional[str] = None,
         x_tick_labels: Optional[list] = None,
-        y_tick_labels: Optional[list] = None
+        y_tick_labels: Optional[list] = None,
+        square: bool = True,
+        linewidths: float = 0.5,
+        linecolor: str = 'white',
+        cmap: str = 'Blues',
+        cbar: bool = True,
+        cbar_kws: Optional[dict] = None,
+        vmin: Optional[float] = None,
+        vmax: Optional[float] = None,
+        center: Optional[float] = None,
+        robust: bool = False
     ):
         if self.model is None:
             raise ValueError("Model not created. Call create_model() or load_model() first.")
@@ -498,21 +699,41 @@ class BaseModel(ABC):
         if ylabel is None:
             ylabel = 'True Label'
         
+        num_classes = cm.shape[0]
+        
+        if square_size is not None:
+            figsize = (square_size * num_classes, square_size * num_classes)
+        elif figsize is None:
+            figsize = (10, 8)
+        
         plt.figure(figsize=figsize)
         
         annot_kws = {}
         if annot_fontsize is not None:
             annot_kws['fontsize'] = annot_fontsize
         
+        if cbar_kws is None:
+            cbar_kws = {'label': 'Normalized Count' if normalize else 'Count'}
+        elif 'label' not in cbar_kws:
+            cbar_kws['label'] = 'Normalized Count' if normalize else 'Count'
+        
         sns.heatmap(
             cm,
             annot=True,
             fmt='.2f' if normalize else 'd',
-            cmap='Blues',
+            cmap=cmap,
+            square=square,
+            linewidths=linewidths,
+            linecolor=linecolor,
+            cbar=cbar,
+            cbar_kws=cbar_kws,
             xticklabels=x_tick_labels_final,
             yticklabels=y_tick_labels_final,
-            cbar_kws={'label': 'Normalized Count' if normalize else 'Count'},
-            annot_kws=annot_kws if annot_kws else None
+            annot_kws=annot_kws if annot_kws else None,
+            vmin=vmin,
+            vmax=vmax,
+            center=center,
+            robust=robust
         )
         
         plt.title(title, fontsize=title_fontsize, fontweight='bold')

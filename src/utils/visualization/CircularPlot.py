@@ -8,6 +8,43 @@ from enum import Enum
 from dataclasses import dataclass
 from pyspark.sql import DataFrame
 from matplotlib.patches import Patch
+from src.utils.visualization.Barplot import COLD_COLOR_PALETTE as BARPLOT_COLD_COLOR_PALETTE
+
+COLD_COLOR_PALETTE = [
+    '#687B8B',
+    '#ADE1F5',
+    '#4F79BD',
+    '#4A9B9B',
+    '#4A8B4A',
+    '#6B4C93',
+    '#8B6FA8',
+    '#6BB3B3',
+    '#6BA86B',
+    '#3A5A8A',
+    '#4A2C5F',
+    '#2F6B6B',
+    '#2F5A2F',
+    '#5A8BC4',
+    '#7A5FA3',
+    '#5AABAB',
+    '#5A9B5A',
+]
+
+def brighten_color(hex_color, factor=0.3):
+    r = int(hex_color[1:3], 16)
+    g = int(hex_color[3:5], 16)
+    b = int(hex_color[5:7], 16)
+    r = min(255, int(r + (255 - r) * factor))
+    g = min(255, int(g + (255 - g) * factor))
+    b = min(255, int(b + (255 - b) * factor))
+    return f"#{r:02x}{g:02x}{b:02x}"
+plt.rcParams['font.family'] = 'Times New Roman'
+plt.rcParams['axes.labelsize'] = 12
+plt.rcParams['axes.titlesize'] = 14
+plt.rcParams['xtick.labelsize'] = 10
+plt.rcParams['ytick.labelsize'] = 10
+plt.rcParams['legend.fontsize'] = 10
+plt.rcParams['figure.titlesize'] = 16
 
 class CircularPlotMode(Enum):
     SINGLE = 'single'
@@ -27,7 +64,13 @@ class CircularMatrixPlot:
         axes = axes.flatten() if n > 1 else [axes]
 
         sns.set_theme(style="white", context="talk")
-        palette = sns.color_palette("Set2", n_colors=n)
+        plt.rcParams["font.family"] = "Times New Roman"
+        
+        n_categories = len(data[0]["values"]) if data else 0
+        if n_categories <= 2:
+            palette = [brighten_color(BARPLOT_COLD_COLOR_PALETTE[i]) for i in range(n_categories)]
+        else:
+            palette = [brighten_color(COLD_COLOR_PALETTE[i % len(COLD_COLOR_PALETTE)]) for i in range(n_categories)]
 
         for i, d in enumerate(data):
             values = d["values"]
@@ -87,7 +130,13 @@ class CircularSinglePlot:
             legend_loc = "upper center"
         ):
         sns.set_theme(style="white", context="talk")
-        palette = sns.color_palette("Set2", n_colors=len(data))
+        plt.rcParams["font.family"] = "Times New Roman"
+        
+        n_categories = len(data)
+        if n_categories <= 2:
+            palette = [brighten_color(BARPLOT_COLD_COLOR_PALETTE[i]) for i in range(n_categories)]
+        else:
+            palette = [brighten_color(COLD_COLOR_PALETTE[i % len(COLD_COLOR_PALETTE)]) for i in range(n_categories)]
 
         fig, ax = plt.subplots(figsize=(col_size, rows_size))
 

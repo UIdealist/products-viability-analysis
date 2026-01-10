@@ -12,6 +12,46 @@ from matplotlib.patches import Patch
 
 from src.utils.text import format_number
 
+COLD_COLOR_PALETTE = [
+    '#193169',
+    '#D4E0EC',
+    '#4F79BD',
+    '#4A9B9B',
+    '#4A8B4A',
+    '#6B4C93',
+    '#8B6FA8',
+    '#6BB3B3',
+    '#6BA86B',
+    '#3A5A8A',
+    '#4A2C5F',
+    '#2F6B6B',
+    '#2F5A2F',
+    '#5A8BC4',
+    '#7A5FA3',
+    '#5AABAB',
+    '#5A9B5A',
+]
+
+def get_label_color(bar_color):
+    if bar_color == COLD_COLOR_PALETTE[0]:
+        return "white"
+    elif bar_color == COLD_COLOR_PALETTE[1]:
+        return "black"
+    else:
+        r = int(bar_color[1:3], 16)
+        g = int(bar_color[3:5], 16)
+        b = int(bar_color[5:7], 16)
+        brightness = (r * 299 + g * 587 + b * 114) / 1000
+        return "black" if brightness > 128 else "white"
+
+plt.rcParams["font.family"] = "Times New Roman"
+plt.rcParams['axes.labelsize'] = 12
+plt.rcParams['axes.titlesize'] = 14
+plt.rcParams['xtick.labelsize'] = 10
+plt.rcParams['ytick.labelsize'] = 10
+plt.rcParams['legend.fontsize'] = 10
+plt.rcParams['figure.titlesize'] = 16
+
 class BarplotMode(Enum):
     SINGLE = 'single'
     MATRIX = 'matrix'
@@ -33,11 +73,15 @@ class BarMatrixPlot:
             subtitle_font_size: int = 13,
             label_font_size: int = 10,
             label_density: float = 1.0,
-            rotate_labels: bool = True,
+            rotate_labels: bool = False,
             label_rotation: int = 60,
             rotate_x_labels: bool = False,
             x_label_rotation: int = 45,
             label_fontweight: str = "normal",
+            x_rotation = 45,
+            y_rotation = 0,
+            reduce_gaps: bool = False,
+            labels_on_top: bool = False,
         ):
         n = len(data)
         cols = min(self.cols, n)
@@ -47,9 +91,9 @@ class BarMatrixPlot:
         axes = axes.flatten() if n > 1 else [axes]
 
         sns.set_theme(style="white", context="talk")
+        plt.rcParams["font.family"] = "Times New Roman"
 
-        base_colors = ["#4c72b0", "#55a3ff", "#2c5aa0", "#1e3d72", "#0f1f3a"]
-        bar_color = base_colors[0] if color == "#4c72b0" else color
+        bar_color = COLD_COLOR_PALETTE[0] if color == "#4c72b0" or color == "#4F79BD" or color == "#687B8B" else color
 
         for i, d in enumerate(data):
             values = d["values"]
@@ -58,8 +102,10 @@ class BarMatrixPlot:
 
             ax = axes[i]
 
+            bar_height = 1.0 if reduce_gaps else 0.8
             bars = ax.barh(
                 labels, values,
+                height=bar_height,
                 color=bar_color, edgecolor="white", linewidth=1.2, alpha=0.9
             )
 
@@ -78,15 +124,19 @@ class BarMatrixPlot:
             min_label_spacing = max(values) * 0.05 if len(values) > 0 else 1
 
             for j, (bar, val) in enumerate(zip(bars, values)):
-                if val > 0 and j in selected_indices:
+                if val > 0 and (labels_on_top or j in selected_indices):
                     display_value = 100*val/len(values) if is_percentage else val
                     if is_percentage:
                         display_text = f"{display_value:.{decimal_points}f}%"
                     else:
                         display_text = f"{format_number(display_value)}"
 
-                    x_pos = bar.get_x() + bar.get_width() / 2
-                    y_pos = bar.get_y() + bar.get_height() / 2
+                    if labels_on_top:
+                        x_pos = bar.get_x() + bar.get_width()
+                        y_pos = bar.get_y() + bar.get_height() / 2
+                    else:
+                        x_pos = bar.get_x() + bar.get_width() / 2
+                        y_pos = bar.get_y() + bar.get_height() / 2
 
                     can_place_label = True
                     for existing_x, existing_y in label_positions:
@@ -96,12 +146,16 @@ class BarMatrixPlot:
                                 break
                     if can_place_label:
 
-                        if rotate_labels:
+                        if labels_on_top:
+                            ha = "left"
+                            va = "center"
+                        elif rotate_labels:
                             ha = "center"
                             va = "center"
                         else:
                             ha = "center"
                             va = "center"
+                        label_color = "black" if labels_on_top else get_label_color(bar_color)
                         ax.text(
                             x_pos,
                             y_pos,
@@ -110,7 +164,7 @@ class BarMatrixPlot:
                             va=va,
                             fontsize=label_font_size,
                             fontweight=label_fontweight,
-                            color="white",
+                            color=label_color,
                             rotation=label_rotation if rotate_labels else 0
                         )
                         label_positions.append((x_pos, y_pos))
@@ -128,7 +182,8 @@ class BarMatrixPlot:
             axes[j].axis("off")
 
         fig.suptitle(self.title, fontsize=title_font_size, fontweight="bold", y=1.02)
-        plt.xticks(rotation=45, ha="right")
+        plt.xticks(rotation=x_rotation, ha="right")
+        plt.yticks(rotation=y_rotation, ha="right")
         plt.tight_layout(h_pad=2)
         plt.show()
 
@@ -148,31 +203,34 @@ class BarSinglePlot:
             title_font_size: int = 16,
             label_font_size: int = 10,
             label_density: float = 1.0,
-            rotate_labels: bool = True,
+            rotate_labels: bool = False,
             label_rotation: int = 60,
             rotate_x_labels: bool = False,
             x_label_rotation: int = 45,
             label_fontweight: str = "normal",
-            show_x_labels: bool = True,
+            show_x_labels: bool = False,
             x_label_density: float = 1.0,
             bar_width: float = 1.0,
             use_exponential_labels: bool = False,
+            horizontal: bool = True,
+            reduce_gaps: bool = False,
+            labels_on_top: bool = False,
         ):
-        sns.set_theme(style="white", context="talk")
-
         values = data["values"]
         labels = data["labels"]
 
         fig, ax = plt.subplots(figsize=figsize)
+        sns.set_theme(style="white", context="talk")
+        plt.rcParams["font.family"] = "Times New Roman"
 
+        bar_color = COLD_COLOR_PALETTE[0] if color == "#4c72b0" or color == "#4F79BD" or color == "#687B8B" else color
 
-        base_colors = ["#4c72b0", "#55a3ff", "#2c5aa0", "#1e3d72", "#0f1f3a"]
-
-        bar_color = base_colors[0] if color == "#4c72b0" else color
-
-
-        bars = ax.bar(labels, values, color=bar_color, edgecolor="white", linewidth=1.2, alpha=0.9, width=bar_width)
-
+        if horizontal:
+            bar_height = 1.0 if reduce_gaps else 0.8
+            bars = ax.barh(labels, values, height=bar_height, color=bar_color, edgecolor="white", linewidth=1.2, alpha=0.9)
+        else:
+            bar_width_val = 1.0 if reduce_gaps else 0.8
+            bars = ax.bar(labels, values, width=bar_width_val, color=bar_color, edgecolor="white", linewidth=1.2, alpha=0.9)
 
         total_bars = len([v for v in values if v > 0])
         labels_to_show = max(1, int(total_bars * label_density))
@@ -184,49 +242,84 @@ class BarSinglePlot:
         min_label_spacing = max(values) * 0.05 if len(values) > 0 else 1
 
         for i, (bar, val) in enumerate(zip(bars, values)):
-            if val > 0 and i in selected_indices:
+            if val > 0 and (labels_on_top or i in selected_indices):
                 display_value = 100*val/len(values) if is_percentage else val
                 if is_percentage:
                     display_text = f"{display_value:.{decimal_points}f}%"
                 else:
                     display_text = f"{format_number(display_value)}"
 
-                x_pos = bar.get_x() + bar.get_width() / 2
-                y_pos = bar.get_height() + max(values) * 0.01
+                if horizontal:
+                    if labels_on_top:
+                        x_pos = bar.get_x() + bar.get_width()
+                        y_pos = bar.get_y() + bar.get_height() / 2
+                    else:
+                        x_pos = bar.get_x() + bar.get_width() / 2
+                        y_pos = bar.get_y() + bar.get_height() / 2
+                else:
+                    x_pos = bar.get_x() + bar.get_width() / 2
+                    if labels_on_top:
+                        y_pos = bar.get_y() + bar.get_height() + max(values) * 0.02
+                    else:
+                        y_pos = bar.get_y() + bar.get_height()
 
                 can_place_label = True
                 for existing_x, existing_y in label_positions:
-                    if abs(x_pos - existing_x) < bar.get_width() * 0.8:
-                        if abs(y_pos - existing_y) < min_label_spacing:
-                            can_place_label = False
-                            break
+                    if horizontal:
+                        if abs(x_pos - existing_x) < bar.get_width() * 0.8:
+                            if abs(y_pos - existing_y) < min_label_spacing:
+                                can_place_label = False
+                                break
+                    else:
+                        if abs(y_pos - existing_y) < bar.get_height() * 0.8:
+                            if abs(x_pos - existing_x) < min_label_spacing:
+                                can_place_label = False
+                                break
                 if can_place_label:
 
-                    if rotate_labels:
-                        ha = "center"
-                        va = "bottom"
-
-                        y_pos_rotated = y_pos + max(values) * 0.02
+                    if horizontal:
+                        if labels_on_top:
+                            ha = "left"
+                            va = "center"
+                        elif rotate_labels:
+                            ha = "center"
+                            va = "center"
+                        else:
+                            ha = "center"
+                            va = "center"
                     else:
-                        ha = "center"
-                        va = "bottom"
-                        y_pos_rotated = y_pos
+                        if labels_on_top:
+                            ha = "center"
+                            va = "bottom"
+                        elif rotate_labels:
+                            ha = "center"
+                            va = "bottom"
+                        else:
+                            ha = "center"
+                            va = "bottom"
+                    label_color = "black" if labels_on_top else get_label_color(bar_color)
                     ax.text(
                         x_pos,
-                        y_pos_rotated,
+                        y_pos,
                         display_text,
                         ha=ha,
                         va=va,
                         fontsize=label_font_size,
                         fontweight=label_fontweight,
-                        color="black",
+                        color=label_color,
                         rotation=label_rotation if rotate_labels else 0
                     )
                     label_positions.append((x_pos, y_pos))
 
-        ax.set_ylabel(ylabel, fontsize=y_font_size, fontweight="bold")
-        ax.set_xlabel(xlabel, fontsize=x_font_size, fontweight="bold")
-        ax.set_ylim(0, max(values) * 1.1)
+        if horizontal:
+            ax.set_xlabel(ylabel, fontsize=y_font_size, fontweight="bold")
+            ax.set_ylabel(xlabel, fontsize=x_font_size, fontweight="bold")
+            ax.set_xlim(0, max(values) * 1.1)
+            ax.invert_yaxis()
+        else:
+            ax.set_xlabel(xlabel, fontsize=x_font_size, fontweight="bold")
+            ax.set_ylabel(ylabel, fontsize=y_font_size, fontweight="bold")
+            ax.set_ylim(0, max(values) * 1.1)
         ax.set_title(self.title, fontsize=title_font_size, fontweight="bold", pad=20)
 
 
@@ -237,20 +330,28 @@ class BarSinglePlot:
         ax.spines['bottom'].set_linewidth(0.8)
 
 
-        if is_percentage:
-            ax.yaxis.set_major_formatter(PercentFormatter(100))
+        if horizontal:
+            if is_percentage:
+                ax.xaxis.set_major_formatter(PercentFormatter(100))
+            else:
+                ax.xaxis.set_major_formatter(FuncFormatter(
+                    lambda val, _: format_number(val) if abs(val) >= 1000 else f"{val:.{decimal_points}f}"
+                ))
+            ax.yaxis.set_tick_params(labelsize=y_font_size)
+            ax.xaxis.set_tick_params(labelsize=x_font_size)
         else:
-            ax.yaxis.set_major_formatter(FuncFormatter(
-                lambda val, _: format_number(val) if abs(val) >= 1000 else f"{val:.{decimal_points}f}"
-            ))
-
-
-        ax.yaxis.set_tick_params(labelsize=y_font_size)
-        ax.xaxis.set_tick_params(labelsize=x_font_size)
+            if is_percentage:
+                ax.yaxis.set_major_formatter(PercentFormatter(100))
+            else:
+                ax.yaxis.set_major_formatter(FuncFormatter(
+                    lambda val, _: format_number(val) if abs(val) >= 1000 else f"{val:.{decimal_points}f}"
+                ))
+            ax.yaxis.set_tick_params(labelsize=y_font_size)
+            ax.xaxis.set_tick_params(labelsize=x_font_size)
 
 
         if show_x_labels:
-
+            axis_to_use = ax.yaxis if horizontal else ax.xaxis
             total_labels = len(labels)
             labels_to_show_count = max(1, int(total_labels * x_label_density))
             if labels_to_show_count < total_labels:
@@ -288,16 +389,30 @@ class BarSinglePlot:
                     if i < len(selected_indices):
                         tick_positions.append(selected_indices[i])
                         tick_labels.append(label)
-                ax.set_xticks(tick_positions)
-                ax.set_xticklabels(tick_labels)
+                if horizontal:
+                    ax.set_yticks(tick_positions)
+                    ax.set_yticklabels(tick_labels)
+                else:
+                    ax.set_xticks(tick_positions)
+                    ax.set_xticklabels(tick_labels)
             else:
-                ax.set_xticklabels(formatted_labels)
+                if horizontal:
+                    ax.set_yticklabels(formatted_labels)
+                else:
+                    ax.set_xticklabels(formatted_labels)
 
-        if rotate_x_labels:
-            plt.xticks(rotation=x_label_rotation, ha="right")
+        if horizontal:
+            if rotate_x_labels:
+                plt.xticks(rotation=x_label_rotation, ha="right")
+            else:
+                plt.xticks(rotation=x_rotation, ha="right")
+            plt.yticks(rotation=y_rotation, ha="right")
         else:
-            plt.xticks(rotation=x_rotation, ha="right")
-        plt.yticks(rotation=y_rotation, ha="right")
+            if rotate_x_labels:
+                plt.xticks(rotation=x_label_rotation, ha="right")
+            else:
+                plt.xticks(rotation=x_rotation, ha="right")
+            plt.yticks(rotation=y_rotation, ha="right")
 
         plt.tight_layout()
         plt.show()
@@ -314,13 +429,16 @@ class PercentBarPlot:
              label_font_size: int = 9,
              legend_font_size: int = 11,
              label_density: float = 1.0,
-             rotate_labels: bool = True,
+             rotate_labels: bool = False,
              label_rotation: int = 60,
              rotate_x_labels: bool = False,
              x_label_rotation: int = 45,
              decimal_points: int = 1,
-             label_fontweight: str = "normal"):
+             label_fontweight: str = "normal",
+             reduce_gaps: bool = False,
+             labels_on_top: bool = False):
         sns.set_theme(style="white", context="talk")
+        plt.rcParams["font.family"] = "Times New Roman"
 
         categories = [d["title"] for d in data]
         values_matrix = np.array([d["values"] for d in data])
@@ -330,20 +448,21 @@ class PercentBarPlot:
 
         n_segments = percentages.shape[1]
 
-        base_colors = ["#4c72b0", "#55a3ff", "#2c5aa0", "#1e3d72", "#0f1f3a"]
-        if color == "#4c72b0":
-            palette = [base_colors[i % len(base_colors)] for i in range(n_segments)]
+        if color == "#4c72b0" or color == "#4F79BD" or color == "#687B8B":
+            palette = [COLD_COLOR_PALETTE[i % len(COLD_COLOR_PALETTE)] for i in range(n_segments)]
         else:
-            palette = sns.color_palette("Set2", n_colors=n_segments)
+            palette = [COLD_COLOR_PALETTE[i % len(COLD_COLOR_PALETTE)] for i in range(n_segments)]
 
         fig, ax = plt.subplots(figsize=figsize)
 
         left = np.zeros(len(categories))
+        bar_width_val = 1.0 if reduce_gaps else 0.8
         for i in range(n_segments):
             bars = ax.bar(
                 categories,
                 percentages[:, i],
                 bottom=left,
+                width=bar_width_val,
                 color=palette[i],
                 edgecolor="white",
                 linewidth=1.2,
@@ -359,10 +478,13 @@ class PercentBarPlot:
             label_positions = []
             min_label_spacing = max(percentages[:, i]) * 0.05 if len(percentages[:, i]) > 0 else 1
             for j, (bar, perc) in enumerate(zip(bars, percentages[:, i])):
-                if perc > 3 and j in selected_indices:
+                if perc > 3 and (labels_on_top or j in selected_indices):
 
                     x_pos = bar.get_x() + bar.get_width()/2
-                    y_pos = bar.get_y() + bar.get_height()/2
+                    if labels_on_top:
+                        y_pos = bar.get_y() + bar.get_height() + max(percentages[:, i]) * 0.01
+                    else:
+                        y_pos = bar.get_y() + bar.get_height()/2
 
                     can_place_label = True
                     for existing_x, existing_y in label_positions:
@@ -372,12 +494,16 @@ class PercentBarPlot:
                                 break
                     if can_place_label:
 
-                        if rotate_labels:
+                        if labels_on_top:
+                            ha = "center"
+                            va = "bottom"
+                        elif rotate_labels:
                             ha = "center"
                             va = "center"
                         else:
                             ha = "center"
                             va = "center"
+                        label_color = "black" if labels_on_top else get_label_color(palette[i])
                         ax.text(
                             x_pos,
                             y_pos,
@@ -386,7 +512,7 @@ class PercentBarPlot:
                             va=va, 
                             fontsize=label_font_size, 
                             fontweight=label_fontweight,
-                            color="black",
+                            color=label_color,
                             rotation=label_rotation if rotate_labels else 0
                         )
                         label_positions.append((x_pos, y_pos))

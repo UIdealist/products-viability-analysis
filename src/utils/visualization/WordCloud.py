@@ -8,6 +8,36 @@ from enum import Enum
 from dataclasses import dataclass
 from pyspark.sql import DataFrame
 from matplotlib.patches import Patch
+from matplotlib.colors import LinearSegmentedColormap
+
+COLD_COLOR_PALETTE = [
+    '#687B8B',
+    '#ADE1F5',
+    '#4F79BD',
+    '#4A9B9B',
+    '#4A8B4A',
+    '#6B4C93',
+    '#8B6FA8',
+    '#6BB3B3',
+    '#6BA86B',
+    '#3A5A8A',
+    '#4A2C5F',
+    '#2F6B6B',
+    '#2F5A2F',
+    '#5A8BC4',
+    '#7A5FA3',
+    '#5AABAB',
+    '#5A9B5A',
+]
+
+COLD_COLORMAP = LinearSegmentedColormap.from_list('cold', COLD_COLOR_PALETTE)
+plt.rcParams['font.family'] = 'Times New Roman'
+plt.rcParams['axes.labelsize'] = 12
+plt.rcParams['axes.titlesize'] = 14
+plt.rcParams['xtick.labelsize'] = 10
+plt.rcParams['ytick.labelsize'] = 10
+plt.rcParams['legend.fontsize'] = 10
+plt.rcParams['figure.titlesize'] = 16
 
 class WordCloudPlotMode(Enum):
     SINGLE = 'single'
@@ -40,7 +70,7 @@ class WordCloudMatrixPlot:
                 width=individual_width,
                 height=individual_height,
                 background_color="white",
-                colormap="viridis"
+                colormap=COLD_COLORMAP
             ).generate_from_frequencies(freqs)
 
             axes[i].imshow(wc, interpolation="bilinear")
@@ -59,7 +89,7 @@ class WordCloudSinglePlot:
 
     def plot(self, data, legend_labels=None, n_col=2, pie_labels=None):
         sns.set_theme(style="white", context="talk")
-        palette = sns.color_palette("Set2", n_colors=len(data))
+        palette = [COLD_COLOR_PALETTE[i % len(COLD_COLOR_PALETTE)] for i in range(len(data))]
 
         fig, ax = plt.subplots(figsize=(8, 8))
 

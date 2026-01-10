@@ -1,9 +1,12 @@
 from pyspark.ml.feature import PCA, PCAModel, Normalizer
 from pyspark.sql import DataFrame
-import matplotlib.pyplot as plt
 import numpy as np
 import os
 import json
+import matplotlib.pyplot as plt
+import seaborn as sns
+from matplotlib.ticker import FuncFormatter
+from src.utils.visualization.Barplot import COLD_COLOR_PALETTE
 
 class PCAEncoder:
     def __init__(
@@ -72,14 +75,36 @@ class PCAEncoder:
         group_size = int(np.ceil(n_components / bins))
         cumsum_variance = np.cumsum(variance)
         grouped_cumsum = [cumsum_variance[min((i + 1) * group_size, n_components) - 1] for i in range(bins)]
+        grouped_cumsum_percent = [val * 100 for val in grouped_cumsum]
         x_labels = [f'{i*group_size+1}-{min((i+1)*group_size, n_components)}' for i in range(bins)]
-        plt.figure(figsize=(10, 6))
-        bars = plt.bar(range(1, bins + 1), grouped_cumsum, tick_label=x_labels)
-        plt.xticks(rotation=45)
-        plt.xlabel(xlabel)
-        plt.ylabel(ylabel)
-        plt.title(title)
-        for bar, value in zip(bars, grouped_cumsum):
-            plt.text(bar.get_x() + bar.get_width()/2, bar.get_height(), f'{value:.2f}', ha='center', va='bottom', fontsize=9)
+        
+        fig, ax = plt.subplots(figsize=(10, 6))
+        sns.set_theme(style="white", context="talk")
+        plt.rcParams["font.family"] = "Times New Roman"
+        
+        bar_color = COLD_COLOR_PALETTE[0]
+        bars = ax.bar(x_labels, grouped_cumsum_percent, width=0.8, color=bar_color, edgecolor="white", linewidth=1.2, alpha=0.9)
+        
+        for bar, value in zip(bars, grouped_cumsum_percent):
+            ax.text(
+                bar.get_x() + bar.get_width()/2,
+                bar.get_height() + max(grouped_cumsum_percent) * 0.02,
+                f'{value:.2f}%',
+                ha='center',
+                va='bottom',
+                fontsize=9
+            )
+        
+        ax.set_xlabel(xlabel, fontsize=12, fontweight="bold")
+        ax.set_ylabel(ylabel, fontsize=12, fontweight="bold")
+        ax.set_ylim(0, max(grouped_cumsum_percent) * 1.1)
+        ax.set_title(title, fontsize=16, fontweight="bold", pad=20)
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda y, _: f"{y:.1f}%"))
+        ax.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_linewidth(0.8)
+        ax.spines['bottom'].set_linewidth(0.8)
+        plt.xticks(rotation=45, ha="right")
         plt.tight_layout()
         plt.show()

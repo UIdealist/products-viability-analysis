@@ -240,3 +240,23 @@ class SampleDataset:
         print("Counts balanced:", counts_balanced)
 
         return df_balanced
+
+def check_null_values(df: DataFrame, column: str):
+    null_count = df.filter(F.col(column).isNull()).count()
+    non_null_count = df.filter(F.col(column).isNotNull()).count()
+    total = df.count()
+    return null_count, non_null_count, total
+
+def check_empty_arrays(df: DataFrame, column: str):
+    def is_empty_array(arr):
+        if arr is None:
+            return True
+        if isinstance(arr, list):
+            return len(arr) == 0
+        return True
+    
+    empty_udf = F.udf(is_empty_array, "boolean")
+    empty_count = df.filter(empty_udf(F.col(column))).count()
+    non_empty_count = df.filter(~empty_udf(F.col(column))).count()
+    total = df.count()
+    return empty_count, non_empty_count, total
